@@ -3,9 +3,16 @@ module Foundation where
 import Import.NoFoundation
 
 import           Control.Applicative      ((<$>), (<*>))
+
+import qualified Data.Text.Lazy.Encoding
+import qualified Data.Monoid                        as DM
 import Database.Persist.Sql (ConnectionPool, runSqlPool)
+
+import Network.Mail.Mime
+import           Text.Blaze.Html.Renderer.Utf8      (renderHtml)
 import Text.Hamlet          (hamletFile)
 import Text.Jasmine         (minifym)
+import Text.Shakespeare.Text              (stext)
 
 -- Used only when in "auth-dummy-login" setting is enabled.
 import Yesod.Auth.Dummy
@@ -227,7 +234,45 @@ instance YesodAuthEmail App where
   afterPasswordRoute _ = HomeR
 
   addUnverified email verkey = error "todo"
-  sendVerifyEmail email _ verurl = error "todo"
+  sendVerifyEmail email _ verurl = do
+    -- Print out to the console the verification email, for easier
+    -- debugging.
+    liftIO $ putStrLn $ "Copy/ Paste this URL in your browser:" DM.<> verurl
+
+    -- Send email.
+    liftIO $ renderSendMail (emptyMail $ Address Nothing "noreply")
+      { mailTo = [Address Nothing email]
+      , mailHeaders =
+          [ ("Subject", "Verify your email address")
+          ]
+      , mailParts = [[textPart', htmlPart']]
+      }
+    where
+      textPart' = Part
+          { partType = "text/plain; charset=utf-8"
+          , partEncoding = None
+          , partFilename = Nothing
+          , partContent = Data.Text.Lazy.Encoding.encodeUtf8
+              [stext|
+                  Please confirm your email address by clicking on the link below.
+                 #{verurl}
+                 Thank you
+              |]
+          , partHeaders = []
+          }
+      htmlPart' = Part
+          { partType = "text/html; charset=utf-8"
+          , partEncoding = None
+          , partFilename = Nothing
+          , partContent = renderHtml
+              [shamlet|
+                  <p>Please confirm your email address by clicking on the link below.
+                  <p>
+                      <a href=#{verurl}>#{verurl}
+                  <p>Thank you
+              |]
+          , partHeaders = []
+          }
   getVerifyKey = error "todo"
   setVerifyKey uid key = error "todo"
   verifyAccount uid = error "todo"
